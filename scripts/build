@@ -1,0 +1,14 @@
+#!/bin/zsh
+# Build Tuck.app and install it to /Applications.
+set -euo pipefail
+cd "${0:A:h}/.."
+APP=build/Tuck.app
+rm -rf build && mkdir -p $APP/Contents/MacOS
+swiftc -O -o $APP/Contents/MacOS/Tuck Sources/main.swift
+cp Info.plist $APP/Contents/Info.plist
+codesign --force --sign - $APP
+if [[ "${1:-}" == "--install" ]]; then
+  pkill -x Tuck || true
+  rm -rf /Applications/Tuck.app && ditto $APP /Applications/Tuck.app
+  open -g /Applications/Tuck.app
+fi
