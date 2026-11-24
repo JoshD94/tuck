@@ -8,5 +8,5 @@ v=${1:?usage: scripts/release VERSION}
 scripts/build
 ditto -c -k --keepParent build/Tuck.app build/Tuck.zip
 git commit -qam "Release $v" || true
-git tag -f "v$v" && ${GIT:-git} push -q origin main "v$v"
-${GH:-gh} release create "v$v" build/Tuck.zip --title "Tuck $v" --generate-notes
+git tag -f "v$v" && ${=GIT:-git} push -q origin main "v$v"
+${=GH:-gh} release create "v$v" build/Tuck.zip --title "Tuck $v" --generate-notes
