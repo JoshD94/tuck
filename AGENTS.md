@@ -7,7 +7,7 @@ use `~/.local/bin/personal gh` / git.
 - `Sources/main.swift` — the whole app (AppKit, no Xcode project).
 - `Info.plist`, `Assets/AppIcon.icns` (regenerate: `swift scripts/make-icon.swift Assets` + iconutil).
 - `scripts/build [--install]` — universal ad-hoc-signed build into `build/`.
-- `scripts/release X.Y.Z` — bump version, build, zip, tag, GitHub release (`Tuck.zip`).
+- `scripts/release X.Y.Z` — bump version, build, zip, tag, GitHub release (`Tuck.zip`). Here run it as `GIT="$HOME/.local/bin/personal git" GH="$HOME/.local/bin/personal gh" scripts/release X.Y.Z`.
 - `install.sh` — the README one-liner; fetches `releases/latest/download/Tuck.zip`.
 - `docs/demo.{mp4,gif}` — README demo, recorded with `screencapture -v` + `open -g tuck://toggle`.
 
