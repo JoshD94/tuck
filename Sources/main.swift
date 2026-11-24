@@ -5,7 +5,7 @@
 // How hiding works on macOS 27: the menu bar no longer pushes icons off-screen when an item is
 // wider than the screen; it drops the oversized item instead. But it does move icons into its
 // overflow (») when an item fills the free space exactly. So on collapse Tuck sizes the divider
-// to the gap between the frontmost app's menus (read with Accessibility) and the arrow, and
+// to the gap between the frontmost app's menus (read with Accessibility) and the dot, and
 // resizes it whenever the frontmost app, its menus or the screen changes.
 import AppKit
 
@@ -21,7 +21,7 @@ if defaults.object(forKey: autoHideKey) == nil { defaults.set(true, forKey: auto
 
 final class Tuck: NSObject, NSApplicationDelegate {
     let toggle = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    let divider = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    var divider: NSStatusItem!
     var collapsed = false
     var hideTimer: Timer?
     var fitGeneration = 0
@@ -29,15 +29,13 @@ final class Tuck: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ note: Notification) {
         toggle.autosaveName = "tuck.toggle"
-        divider.autosaveName = "tuck.divider"
         toggle.behavior = []
-        divider.behavior = []
         if let b = toggle.button {
             b.target = self
             b.action = #selector(clicked)
             b.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
-        divider.button?.appearsDisabled = true
+        makeDivider()
 
         if !AXIsProcessTrusted() {
             AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary)
@@ -54,16 +52,29 @@ final class Tuck: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.collapse() }
     }
 
-    func symbol(_ name: String, _ label: String) -> NSImage? {
-        let img = NSImage(systemSymbolName: name, accessibilityDescription: label)
+    func symbol(_ name: String, _ label: String, size: CGFloat? = nil) -> NSImage? {
+        var img = NSImage(systemSymbolName: name, accessibilityDescription: label)
+        if let size { img = img?.withSymbolConfiguration(.init(pointSize: size, weight: .semibold)) }
         img?.isTemplate = true
         return img
+    }
+
+    /// (Re)create the divider directly left of the dot, so no other icon sits between them.
+    func makeDivider() {
+        if let divider { NSStatusBar.system.removeStatusItem(divider) }
+        let togglePos = defaults.double(forKey: "NSStatusItem Preferred Position tuck.toggle")
+        defaults.set(togglePos + 1, forKey: "NSStatusItem Preferred Position tuck.divider")
+        divider = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        divider.autosaveName = "tuck.divider"
+        divider.behavior = []
+        divider.button?.appearsDisabled = true
+        divider.button?.image = symbol("line.diagonal", "Divider")
     }
 
     var toggleFrame: CGRect? { toggle.button?.window?.frame }
     var dividerFrame: CGRect? { divider.button?.window?.frame }
 
-    // Laid out = divider sits right next to the arrow, on its left.
+    // Laid out = divider sits right next to the dot, on its left.
     var dividerPlaced: Bool {
         guard let d = dividerFrame, let t = toggleFrame else { return false }
         return d.maxX <= t.minX + 1 && t.minX - d.maxX < 20
@@ -74,12 +85,18 @@ final class Tuck: NSObject, NSApplicationDelegate {
         collapsed ? expand(scheduleHide: true) : collapse()
     }
 
-    func collapse() {
+    func collapse(retried: Bool = false) {
         hideTimer?.invalidate()
-        guard dividerPlaced else { NSSound.beep(); return }  // divider was dragged right of the arrow
+        guard dividerPlaced else {
+            // Something got between the divider and the dot (or the divider was dragged): snap it back.
+            if retried { NSSound.beep(); return }
+            makeDivider()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.collapse(retried: true) }
+            return
+        }
         collapsed = true
         divider.button?.image = nil
-        toggle.button?.image = symbol("eye.slash", "Show hidden icons")
+        toggle.button?.image = symbol("circle.fill", "Show hidden icons", size: 9)
         fit(attempt: 0)
     }
 
@@ -90,7 +107,7 @@ final class Tuck: NSObject, NSApplicationDelegate {
         collapsed = false
         divider.length = NSStatusItem.variableLength
         divider.button?.image = symbol("line.diagonal", "Divider")
-        toggle.button?.image = symbol("eye", "Hide icons")
+        toggle.button?.image = symbol("circle", "Hide icons", size: 9)
         if scheduleHide && defaults.bool(forKey: autoHideKey) {
             hideTimer = Timer.scheduledTimer(withTimeInterval: autoHideSeconds, repeats: false) { [weak self] _ in
                 self?.collapse()
@@ -103,11 +120,11 @@ final class Tuck: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { self.fit(attempt: 0) }
     }
 
-    /// Size the divider to fill the free space left of the arrow; shrink a little if macOS drops it.
+    /// Size the divider to fill the free space left of the dot; shrink a little if macOS drops it.
     func fit(attempt: Int) {
         guard collapsed, let t = toggleFrame else { return }
         let menusEnd = frontmostMenusEnd(before: t.minX) ?? (t.minX * 0.45)
-        // Window = length + 16 padding, plus an 8pt gap before the arrow.
+        // Window = length + 16 padding, plus an 8pt gap before the dot.
         let target = max(0, (t.minX - 24 - menusEnd - 4 - CGFloat(attempt) * 12).rounded(.down))
         if attempt == 0, menusEnd == fittedMenusEnd, dividerPlaced { return }
         divider.length = target
@@ -174,12 +191,12 @@ final class Tuck: NSObject, NSApplicationDelegate {
         let a = NSAlert()
         a.messageText = "How to use Tuck"
         a.informativeText = """
-        Click the eye to show or hide icons.
+        Click the dot to show or hide icons.
 
         To choose what hides: hold ⌘ and drag menu bar icons. Anything left of the \
-        slash ( / ) hides; anything right of it stays visible. Keep the slash just left of the eye.
+        slash ( / ) hides; anything right of it stays visible. Keep the slash just left of the dot.
 
-        Right-click the eye for settings.
+        Right-click the dot for settings.
         """
         NSApp.activate()
         a.runModal()
