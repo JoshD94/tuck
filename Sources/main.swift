@@ -11,6 +11,7 @@ import AppKit
 
 let defaults = UserDefaults.standard
 let autoHideKey = "autoHide"
+let extraRoomKey = "extraRoom"
 let autoHideSeconds: TimeInterval = 10
 
 if defaults.object(forKey: "NSStatusItem Preferred Position tuck.toggle") == nil {
@@ -47,7 +48,7 @@ final class Tuck: NSObject, NSApplicationDelegate {
 
         let ws = NSWorkspace.shared.notificationCenter
         ws.addObserver(self, selector: #selector(refit), name: NSWorkspace.didActivateApplicationNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(refit),
+        NotificationCenter.default.addObserver(self, selector: #selector(screenChanged),
                                                name: NSApplication.didChangeScreenParametersNotification, object: nil)
         // Menus can change without an app switch (e.g. a window opens); re-check now and then.
         Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.refit() }
@@ -130,25 +131,63 @@ final class Tuck: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc func screenChanged() {
+        defaults.removeObject(forKey: extraRoomKey)  // relearn the padding for the new display
+        fittedMenusEnd = -1
+        refit()
+    }
+
     @objc func refit() {
         guard collapsed else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { self.fit(attempt: 0) }
     }
 
-    /// Size the divider to fill the free space left of the dot; shrink a little if macOS drops it.
+    /// Size the divider to fill all the free space left of the dot. Filling it completely matters:
+    /// any leftover room and macOS shows its own « overflow button there.
     func fit(attempt: Int) {
         guard collapsed, let t = toggleFrame else { return }
-        let menusEnd = frontmostMenusEnd(before: t.minX) ?? (t.minX * 0.45)
-        // Window = length + 16 padding, plus an 8pt gap before the dot.
-        let target = max(0, (t.minX - 24 - menusEnd - 4 - CGFloat(attempt) * 12).rounded(.down))
+        let measured = frontmostMenusEnd(before: t.minX)
+        let menusEnd = measured ?? (t.minX * 0.45)
         if attempt == 0, menusEnd == fittedMenusEnd, dividerPlaced { return }
+        // Window = length + 16 padding, plus an 8pt gap before the dot.
+        let base = t.minX - 24 - menusEnd
+        if measured != nil, defaults.object(forKey: extraRoomKey) == nil {
+            calibrate(base: base, step: 0)
+            return
+        }
+        let extra = measured != nil ? defaults.double(forKey: extraRoomKey) : -4
+        let shrink = CGFloat(attempt) * (measured != nil ? 3 : 12)
+        let target = max(0, (base + extra - shrink).rounded(.down))
         divider.length = target
         fitGeneration += 1
         let gen = fitGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
             guard gen == self.fitGeneration, self.collapsed else { return }
-            if self.dividerPlaced { self.fittedMenusEnd = menusEnd }
-            else if attempt < 8 { self.fit(attempt: attempt + 1) }
+            if self.dividerPlaced {
+                self.fittedMenusEnd = menusEnd
+                if measured != nil, attempt > 0 { defaults.set(extra - shrink, forKey: extraRoomKey) }
+            } else if attempt < 10 {
+                self.fit(attempt: attempt + 1)
+            }
+        }
+    }
+
+    /// One-time: learn how far past the measured gap the divider still fits (menu bar padding),
+    /// by growing it 6pt at a time until macOS drops it.
+    func calibrate(base: CGFloat, step: Int) {
+        let extra = CGFloat(-8 + step * 6)
+        divider.length = max(0, (base + extra).rounded(.down))
+        fitGeneration += 1
+        let gen = fitGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            guard gen == self.fitGeneration, self.collapsed else { return }
+            if self.dividerPlaced && step < 40 {
+                self.calibrate(base: base, step: step + 1)
+            } else {
+                defaults.set(Double(extra - 6), forKey: extraRoomKey)
+                self.fittedMenusEnd = -1
+                self.fit(attempt: 0)
+            }
         }
     }
 

@@ -13,7 +13,14 @@ lipo -create build/Tuck-arm64 build/Tuck-x86_64 -output $APP/Contents/MacOS/Tuck
 rm build/Tuck-*
 cp Info.plist $APP/Contents/Info.plist
 cp Assets/AppIcon.icns $APP/Contents/Resources/
-codesign --force --sign - $APP 2>/dev/null
+# Local installs sign with your Apple Development identity if you have one, so macOS keeps the
+# Accessibility permission across rebuilds. Release builds stay ad-hoc signed.
+ID=-
+if [[ "${1:-}" == "--install" ]]; then
+  ID=$(security find-identity -v -p codesigning | sed -nE "s/.*\) ([0-9A-F]{40}) \"Apple Development.*/\1/p" | head -1)
+  ID=${ID:--}
+fi
+codesign --force --sign "$ID" $APP 2>/dev/null
 echo "built $APP"
 if [[ "${1:-}" == "--install" ]]; then
   pkill -x Tuck || true

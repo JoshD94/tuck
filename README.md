@@ -65,8 +65,6 @@ Requires macOS 14 or later. Runs natively on Apple silicon and Intel.
   icons left or right of the triangle.
 - **Auto-hide:** shown icons tuck themselves away again after 10 seconds.
 - **Settings:** right-click the dot for *Open at Login*, auto-hide, and Quit.
-- **Hidden icons in a pinch:** macOS shows a « button for icons that don't fit. Clicking it
-  lists your tucked icons too.
 
 ### Automation
 
@@ -81,6 +79,7 @@ open -g tuck://toggle   # or tuck://show, tuck://hide
 Tuck adds two menu bar items: the dot and the triangle divider just left of it. To tuck icons
 away, it stretches the divider to fill exactly the free space between the current app's menus
 and the dot. Icons left of the divider no longer fit, so macOS moves them out of the menu bar.
+It fills the gap completely, so there's no room left for macOS's own « overflow button either.
 When you switch apps (and their menus get wider or narrower), Tuck resizes the divider to match.
 
 Classic hiders stretch the divider to 10,000 points instead. Newer macOS versions drop an item
