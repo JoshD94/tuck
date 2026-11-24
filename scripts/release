@@ -1,0 +1,12 @@
+#!/bin/zsh
+# Build and publish a GitHub release: scripts/release 1.0.0
+set -euo pipefail
+cd "${0:A:h}/.."
+v=${1:?usage: scripts/release VERSION}
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $v" Info.plist
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${v//./}" Info.plist
+scripts/build
+ditto -c -k --keepParent build/Tuck.app build/Tuck.zip
+git commit -qam "Release $v" || true
+git tag -f "v$v" && git push -q origin main "v$v"
+gh release create "v$v" build/Tuck.zip --title "Tuck $v" --generate-notes

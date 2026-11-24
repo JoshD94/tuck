@@ -1,12 +1,20 @@
 #!/bin/zsh
-# Build Tuck.app and install it to /Applications.
+# Build a universal (Apple silicon + Intel) Tuck.app into build/.
+#   scripts/build            build only
+#   scripts/build --install  also replace /Applications/Tuck.app and launch it
 set -euo pipefail
 cd "${0:A:h}/.."
 APP=build/Tuck.app
-rm -rf build && mkdir -p $APP/Contents/MacOS
-swiftc -O -o $APP/Contents/MacOS/Tuck Sources/main.swift
+rm -rf build && mkdir -p $APP/Contents/MacOS $APP/Contents/Resources
+for arch in arm64 x86_64; do
+  swiftc -O -target $arch-apple-macos14 -o build/Tuck-$arch Sources/main.swift
+done
+lipo -create build/Tuck-arm64 build/Tuck-x86_64 -output $APP/Contents/MacOS/Tuck
+rm build/Tuck-*
 cp Info.plist $APP/Contents/Info.plist
-codesign --force --sign - $APP
+cp Assets/AppIcon.icns $APP/Contents/Resources/
+codesign --force --sign - $APP 2>/dev/null
+echo "built $APP"
 if [[ "${1:-}" == "--install" ]]; then
   pkill -x Tuck || true
   rm -rf /Applications/Tuck.app && ditto $APP /Applications/Tuck.app

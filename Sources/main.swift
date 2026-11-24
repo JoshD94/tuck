@@ -1,6 +1,6 @@
 // Tuck: a tiny menu bar hider.
 //
-// Icons left of the "/" divider hide when collapsed; ⌘-drag icons across the divider to choose.
+// Icons left of the ◀ divider hide when collapsed; ⌘-drag icons across the divider to choose.
 //
 // How hiding works on macOS 27: the menu bar no longer pushes icons off-screen when an item is
 // wider than the screen; it drops the oversized item instead. But it does move icons into its
@@ -15,7 +15,6 @@ let autoHideSeconds: TimeInterval = 10
 
 if defaults.object(forKey: "NSStatusItem Preferred Position tuck.toggle") == nil {
     defaults.set(260.0, forKey: "NSStatusItem Preferred Position tuck.toggle")
-    defaults.set(290.0, forKey: "NSStatusItem Preferred Position tuck.divider")
 }
 if defaults.object(forKey: autoHideKey) == nil { defaults.set(true, forKey: autoHideKey) }
 
@@ -36,6 +35,11 @@ final class Tuck: NSObject, NSApplicationDelegate {
             b.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
         makeDivider()
+
+        // Scriptable: `open -g tuck://toggle` (also tuck://show, tuck://hide).
+        NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleURL(_:reply:)),
+                                                     forEventClass: AEEventClass(kInternetEventClass),
+                                                     andEventID: AEEventID(kAEGetURL))
 
         if !AXIsProcessTrusted() {
             AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary)
@@ -68,7 +72,7 @@ final class Tuck: NSObject, NSApplicationDelegate {
         divider.autosaveName = "tuck.divider"
         divider.behavior = []
         divider.button?.appearsDisabled = true
-        divider.button?.image = symbol("line.diagonal", "Divider")
+        divider.button?.image = symbol("arrowtriangle.left.fill", "Divider", size: 8)
     }
 
     var toggleFrame: CGRect? { toggle.button?.window?.frame }
@@ -106,12 +110,23 @@ final class Tuck: NSObject, NSApplicationDelegate {
         fittedMenusEnd = -1
         collapsed = false
         divider.length = NSStatusItem.variableLength
-        divider.button?.image = symbol("line.diagonal", "Divider")
+        divider.button?.image = symbol("arrowtriangle.left.fill", "Divider", size: 8)
         toggle.button?.image = symbol("circle", "Hide icons", size: 9)
         if scheduleHide && defaults.bool(forKey: autoHideKey) {
             hideTimer = Timer.scheduledTimer(withTimeInterval: autoHideSeconds, repeats: false) { [weak self] _ in
                 self?.collapse()
             }
+        }
+    }
+
+    @objc func handleURL(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
+        guard let s = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
+              let host = URL(string: s)?.host else { return }
+        switch host {
+        case "toggle": collapsed ? expand(scheduleHide: true) : collapse()
+        case "show": expand(scheduleHide: true)
+        case "hide": collapse()
+        default: break
         }
     }
 
@@ -194,7 +209,7 @@ final class Tuck: NSObject, NSApplicationDelegate {
         Click the dot to show or hide icons.
 
         To choose what hides: hold ⌘ and drag menu bar icons. Anything left of the \
-        slash ( / ) hides; anything right of it stays visible. Keep the slash just left of the dot.
+        triangle ( ◀ ) hides; anything right of it stays visible. Keep the triangle just left of the dot.
 
         Right-click the dot for settings.
         """
